@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/pkg/errors"
 )
 
@@ -15,6 +16,13 @@ const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-s
 const seeDocs = "See " + seeDocsURL
 const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
 const noTlsSuccess = "<bold>You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>"
+
+// An internal error that should never happen.
+func (i *Installer) InternalError(err error) Result {
+	return Result{
+		Err: err,
+	}
+}
 
 // User interrupted the email request.
 func (i *Installer) EmailRequestError(err error) Result {
@@ -79,42 +87,20 @@ func (i *Installer) GetVersionsError(err error) Result {
 	}
 }
 
-// Unable to fetch the AES CRD manifests (aes-crds.yaml)
-func (i *Installer) AESCRDManifestsError(err error) Result {
+// Unable to download the latest Chart
+func (i *Installer) DownloadError(err error) Result {
 	i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
 
 	return Result{
-		Message: "download AES CRD manifests",
-		URL:     "https://www.getambassador.io/docs/topics/install/help/aes-crd-manifests",
-		Err:     errors.Wrap(err, "download AES CRD manifests"),
-	}
-}
-
-// Unable to fetch the AES manifests (aes.yaml)
-func (i *Installer) AESManifestsError(err error) Result {
-	i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
-
-	return Result{
-		Message: "download AES manifests",
+		Message: "failed to download AES",
+		Report:  "fail_download",
 		URL:     "https://www.getambassador.io/docs/topics/install/help/aes-manifests",
 		Err:     errors.Wrap(err, "download AES manifests"),
 	}
 }
 
-// Unable to parse the downloaded AES manifests
-func (i *Installer) ManifestParsingError(err error, matches []string) Result {
-	i.log.Printf("matches is %+v", matches)
-
-	return Result{
-		Report:  "fail_bad_manifests",
-		Message: "Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?",
-		URL:     "https://www.getambassador.io/docs/topics/install/help/manifest-parsing",
-		Err:     err,
-	}
-}
-
-// Existing AES CRD's of incompatible version
-func (i *Installer) IncompatibleCRDVersionsError(err error, installedVersion string) Result {
+// Existing AES of incompatible version
+func (i *Installer) ExistingInstallationFoundError(err error, installedVersion string) Result {
 	abortExisting := `
 This tool does not support upgrades/downgrades at this time.
 The installer will now quit to avoid corrupting an existing installation of AES.
@@ -131,37 +117,19 @@ The installer will now quit to avoid corrupting an existing installation of AES.
 	}
 }
 
-// Existing AES CRD's, unable to upgrade.
-func (i *Installer) ExistingCRDsError(err error) Result {
-	abortCRDs := `You can manually remove installed CRDs if you are confident they are not in use by any installation. Removing the CRDs will cause your existing Ambassador Mappings and other resources to be deleted as well.
+// Existing AES, unable to upgrade.
+func (i *Installer) ExistingAESsError(err error) Result {
+	abortCRDs := `You can manually remove installed AES if you are confident they are not in use.
 
-<bold>$ kubectl delete crd -l product=aes</>
+<bold>$ kubectl delete all -l product=aes</>
 
 The installer will now quit to avoid corrupting an existing (but undetected) installation.
 `
 	return Result{
-		Report:  "fail_existing_crds",
+		Report:  "fail_existing_installation",
 		Message: abortCRDs,
 		URL:     "https://www.getambassador.io/docs/topics/install/help/existing-crds",
 		Err:     err,
-	}
-}
-
-// Unable to kubectl apply the aes-crd.yaml manifests
-func (i *Installer) InstallCRDsError(err error) Result {
-	return Result{
-		Report: "fail_install_crds",
-		URL:    "https://www.getambassador.io/docs/topics/install/help/install-crds",
-		Err:    err,
-	}
-}
-
-// 90-second timeout on waiting for aes-crd.yaml manifests to be established
-func (i *Installer) WaitCRDsError(err error) Result {
-	return Result{
-		Report: "fail_wait_crds",
-		URL:    "https://www.getambassador.io/docs/topics/install/help/wait-crds",
-		Err:    err,
 	}
 }
 
@@ -203,10 +171,10 @@ func (i *Installer) KnownLocalClusterResult() Result {
 	message += "\n\n"
 
 	return Result{
-		Report: "cluster_not_accessible",
+		Report:  "cluster_not_accessible",
 		Message: message,
-		URL:    seeDocsURL,
-		Err:    nil,
+		URL:     seeDocsURL,
+		Err:     nil,
 	}
 }
 
@@ -221,10 +189,10 @@ func (i *Installer) LoadBalancerError(err error) Result {
 
 	return Result{
 
-		Report: "fail_loadbalancer_timeout",
+		Report:  "fail_loadbalancer_timeout",
 		Message: message,
-		URL:    "https://www.getambassador.io/docs/topics/install/help/load-balancer",
-		Err:    err,
+		URL:     "https://www.getambassador.io/docs/topics/install/help/load-balancer",
+		Err:     err,
 	}
 }
 
@@ -238,10 +206,10 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 
 	return Result{
 		Report:   "aes_listening_timeout",
-		Message: message,
+		Message:  message,
 		TryAgain: true,
-		URL: "https://www.getambassador.io/docs/topics/install/help/aes-acme-challenge",
-		Err: err,
+		URL:      "https://www.getambassador.io/docs/topics/install/help/aes-acme-challenge",
+		Err:      err,
 	}
 }
 
